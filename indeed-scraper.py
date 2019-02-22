@@ -271,14 +271,19 @@ def main(args):
 	print(time.clock() - t),
 
 if __name__ == "__main__":
-	parser = argparse.ArgumentParser(description='Scrape Indeed Resumes', usage='python indeed-scraper.py <arguments>')
-	parser.add_argument('-q', metavar='query', required=True, help='search query to run on indeed e.g software engineer')
+	parser = argparse.ArgumentParser(
+		description='Scrape Indeed Resumes',
+		formatter_class=argparse.ArgumentDefaultsHelpFormatter
+	)
+	required_arguments = parser.add_argument_group(title='required arguments')
+	required_arguments.add_argument('-q', metavar='query', required=True, help='search query to run on indeed e.g software engineer')
+	required_arguments.add_argument('--name', metavar='name', required=True, help='name of search (used to save files)')
+
 	parser.add_argument('-l', default='Canada', metavar='location', help='location scope for search')
 	parser.add_argument('-si', default=0, type=int, metavar='start', help='starting index (multiples of 50)')
 	parser.add_argument('-ei', default=5000, type=int, metavar='end', help='ending index (multiples of 50)')
 	parser.add_argument('--threads', default=8, type=int, metavar='threads', help='# of threads to run')
 	parser.add_argument('--override', action='store_true', help='override existing result if any')
-	parser.add_argument('--name', metavar='name', required=True, help='name of search (used to save files)')
 
 	args = parser.parse_args()
 	main(args)
