@@ -29,18 +29,22 @@ SKILLS = 'Skills'
 CERTIFICATIONS = 'Certifications'
 ADDITIONAL_INFORMATION = 'Additional Information'
 
-class Resume(object):
-	def __init__ (self, idd, jobs=None, schools=None):
+# INDICES
+SKILL_NAME_INDEX = 0
+SKILL_EXP_INDEX = 1
+
+class Resume:
+	def __init__ (self, idd, jobs=None, schools=None, skills=None):
 		self.id = idd
 		self.jobs = jobs
 		self.schools = schools
+		self.skills = skills
 
 	def toJSON(self):
-		return json.dumps(self, default=lambda o: o.__dict__, 
-			sort_keys=True, indent=2)
+		return json.dumps(self, default=lambda o: o.__dict__)
 
 
-class Job(object):
+class Job:
 	def __init__(self, title, company, work_dates, details):
 		self.title = title
 		self.company = company
@@ -51,7 +55,7 @@ class Job(object):
 
 		self.details = details
 
-class School(object):
+class School:
 	def __init__(self, degree, school_name, grad_date):
 		self.degree = degree
 		self.school_name = school_name
@@ -62,6 +66,11 @@ class School(object):
 			dates = grad_date.split(' to ')
 			self.start_date = dates[0]
 			self.end_date = '' if len(dates) == 1 else dates[1]
+
+class Skill:
+	def __init__(self, skill, experience):
+		self.skill = skill
+		self.experience = experience
 
 def gen_idds(url, driver):
 
@@ -105,7 +114,7 @@ def produce_education(edusection):
 		if degree is not None:
 			degree = degree.get_text(' ', strip=True)
 		university_details = school.find(class_="rezemp-ResumeDisplay-university")
-		school_name = university_details.find('div', class_='icl-u-textBold')
+		school_name = university_details.find('span', class_='icl-u-textBold')
 		if school_name is not None:
 			school_name = school_name.get_text()
 		date = school.find(class_="rezemp-ResumeDisplay-date")
@@ -114,8 +123,21 @@ def produce_education(edusection):
 		schools.append(School(degree, school_name, date))
 	return schools
 
-def produce_skills():
-	pass
+def produce_skills(skillsection):
+	content = skillsection.find('div', class_='rezemp-ResumeDisplaySection-content')
+	skills = []
+	for skill_details in content.children:
+		if skill_details.string is None:
+			# there is no string attribute,
+			# so it must be nested and so must be an actual skill
+			# find skill detail spans
+			skill_spans = skill_details.span.find_all('span')
+			skill = skill_spans[SKILL_NAME_INDEX].get_text()
+			experience = ''
+			if len(skill_spans) == 2:
+				experience = skill_spans[SKILL_EXP_INDEX].get_text()
+			skills.append(Skill(skill, experience))
+	return skills
 
 def produce_certifications_license():
 	pass
@@ -134,7 +156,8 @@ def gen_resume(idd, driver):
 
 	resume_details = {
 		'jobs': None,
-		'schools': None
+		'schools': None,
+		'skills': None
 	}
 	for subsection in resume_subsections:
 		children = subsection.contents
@@ -144,7 +167,7 @@ def gen_resume(idd, driver):
 		elif subsection_title == EDUCATION:
 			resume_details['schools'] = produce_education(subsection)
 		elif subsection_title == SKILLS:
-			produce_skills()
+			resume_details['skills'] = produce_skills(subsection)
 		elif subsection_title == CERTIFICATIONS:
 			produce_certifications_license()
 		elif subsection_title == ADDITIONAL_INFORMATION:
@@ -154,7 +177,7 @@ def gen_resume(idd, driver):
 
 	return Resume(idd, **resume_details)
 
-def mine(filename, URL, override=True, search_range=None):
+def mine(filename, URL, override=True, search_range=None, steps=NUM_INDEED_RESUME_RESULTS):
 	driver = webdriver.Firefox()
 	driver.implicitly_wait(10)
 
@@ -170,21 +193,20 @@ def mine(filename, URL, override=True, search_range=None):
 			stri = URL + '&start=' + str(search)
 			idds = gen_idds(stri, driver)
 			# move to the next results irrespective
-			search += NUM_INDEED_RESUME_RESULTS
+			search += steps
 			if(len(idds) == 0):
 				time.sleep(2)
 				continue
 
 			with open(filename, 'a') as outfile:
-				for idd in idds:
-					outfile.write(gen_resume(idd, driver).toJSON() + "\n")
-
-		# resumes = [gen_resume(idd).toJSON() for idd in idds] 
+				# really only needed because to make
+				# small number of resumes for testing
+				for i in range(steps):
+					outfile.write(gen_resume(idds[i], driver).toJSON() + "\n")
 	except Exception as e:
 		sys.stderr.write('Caught exception ' + str(e) + traceback.format_exc() + "\n")
 	finally:
 		driver.close()
-
 
 def mine_multi(args, search_URL):
 	thread_list = []
@@ -193,16 +215,19 @@ def mine_multi(args, search_URL):
 	start = args.si
 	end = args.ei
 	tr = args.threads
-	starting_points = list(range(start, end, (end - start) // tr))
+	steps = ceil((end - start) / tr)
+	starting_points = list(range(start, end, steps))
 	for idx, search_start in enumerate(starting_points):
 		# Instantiates the thread
 		filename = 'resume_output' + args.name + str(idx) + '.json'
+		search_range = (search_start, end if idx + 1 == len(starting_points) else starting_points[idx + 1])
 		t = threading.Thread(
 			target=mine,
 			args=(filename, search_URL),
 			kwargs={
 				"override" : args.override,
-				"search_range" : (search_start, end if idx + 1 == len(starting_points) else starting_points[idx + 1])
+				"search_range" : search_range,
+				"steps": min(end - starting_points[idx], steps, NUM_INDEED_RESUME_RESULTS)
 			}
 		)
 		# Sticks the thread in a list so that it remains accessible
