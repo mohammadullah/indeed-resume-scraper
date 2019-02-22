@@ -32,13 +32,15 @@ ADDITIONAL_INFORMATION = 'Additional Information'
 # INDICES
 SKILL_NAME_INDEX = 0
 SKILL_EXP_INDEX = 1
+INFO_CONTENT_DETAILS_INDEX = 0
 
 class Resume:
-	def __init__ (self, idd, jobs=None, schools=None, skills=None):
+	def __init__ (self, idd, **kwargs):
 		self.id = idd
-		self.jobs = jobs
-		self.schools = schools
-		self.skills = skills
+		self.jobs = kwargs.get('jobs')
+		self.schools = kwargs.get('schools')
+		self.skills = kwargs.get('skills')
+		self.additional = kwargs.get('additional')
 
 	def toJSON(self):
 		return json.dumps(self, default=lambda o: o.__dict__)
@@ -71,6 +73,10 @@ class Skill:
 	def __init__(self, skill, experience):
 		self.skill = skill
 		self.experience = experience
+
+class Info:
+	def __init__(self, details):
+		self.details = details
 
 def gen_idds(url, driver):
 
@@ -139,11 +145,15 @@ def produce_skills(skillsection):
 			skills.append(Skill(skill, experience))
 	return skills
 
+# in case if needed later on in the future
 def produce_certifications_license():
 	pass
 
-def produce_info():
-	pass
+def produce_additional(infosection):
+	content = infosection.find('div', class_='rezemp-ResumeDisplaySection-content')
+	# only one div in content
+	info_details = content.contents[INFO_CONTENT_DETAILS_INDEX]
+	return [detail for detail in info_details.stripped_strings]
 
 def gen_resume(idd, driver):
 	resume_url = INDEED_RESUME_BASE_URL + idd
@@ -154,11 +164,7 @@ def gen_resume(idd, driver):
 
 	resume_subsections = soup.find_all('div', attrs={"class":"rezemp-ResumeDisplaySection"})
 
-	resume_details = {
-		'jobs': None,
-		'schools': None,
-		'skills': None
-	}
+	resume_details = {}
 	for subsection in resume_subsections:
 		children = subsection.contents
 		subsection_title = children[0].get_text()
@@ -171,7 +177,7 @@ def gen_resume(idd, driver):
 		elif subsection_title == CERTIFICATIONS:
 			produce_certifications_license()
 		elif subsection_title == ADDITIONAL_INFORMATION:
-			produce_info()
+			resume_details['additional'] = produce_additional(subsection)
 		else:
 			print('ID', idd, '- Subsection title is', subsection_title)
 
