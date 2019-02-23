@@ -39,6 +39,10 @@ INFO_CONTENT_DETAILS_INDEX = 0
 # RESULT FILE BASE NAME
 OUTPUT_BASE_NAME = 'resume_output_'
 
+# DRIVERS
+FIREFOX = 'firefox'
+CHROME = 'chrome'
+
 class Resume:
 	def __init__ (self, idd, **kwargs):
 		self.id = idd
@@ -188,8 +192,11 @@ def gen_resume(idd, driver):
 
 	return Resume(idd, **resume_details)
 
-def mine(filename, URL, override=True, search_range=None, steps=NUM_INDEED_RESUME_RESULTS):
-	driver = webdriver.Firefox()
+def mine(filename, URL, override=True, search_range=None, steps=NUM_INDEED_RESUME_RESULTS, driver=FIREFOX):
+	if driver == FIREFOX:
+		driver = webdriver.Firefox()
+	else:
+		driver = webdriver.Chrome()
 	driver.implicitly_wait(10)
 
 	if override:
@@ -239,7 +246,8 @@ def mine_multi(args, search_URL):
 			mine_kwargs = {
 				"override" : args.override,
 				"search_range" : search_range,
-				"steps": min(end - starting_points[idx], steps, NUM_INDEED_RESUME_RESULTS)
+				"steps": min(end - starting_points[idx], steps, NUM_INDEED_RESUME_RESULTS),
+				"driver": args.driver
 			}
 			fs.append(executor.submit(mine, *mine_args, **mine_kwargs))
 			
@@ -298,6 +306,7 @@ if __name__ == "__main__":
 	parser.add_argument('-ei', default=5000, type=int, metavar='end', help='ending index (multiples of 50)')
 	parser.add_argument('--threads', default=8, type=int, metavar='threads', help='# of threads to run')
 	parser.add_argument('--override', default=False, action='store_true', help='override existing result if any')
+	parser.add_argument('--driver', default=FIREFOX, choices=[FIREFOX, CHROME])
 
 	args = parser.parse_args()
 

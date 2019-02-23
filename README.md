@@ -12,6 +12,17 @@ or
 conda install --file requirements.txt
 ```
 
+A Mac version `geckodriver` is installed. If you use Mac and have Firefox you can use it. If not please, follow the
+driver installations for your platform and desired browser (you can use either `Chrome` or `Firefox`) as mentioned [here](https://selenium-python.readthedocs.io/installation.html).
+
+You would need to put it to some directory that is in your PATH e.g `/usr/local/bin`.
+Alertnatively you can put the drivers into this directory and add
+this directory into your path:
+
+```
+PATH=$(pwd):$PATH
+```
+
 # Running script
 
 ```bash
