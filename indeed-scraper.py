@@ -14,13 +14,15 @@ from time import sleep
 from math import ceil
 import os
 import argparse
-from urllib.parse import quote_plus
+from urllib.parse import quote_plus, urlencode
 import traceback
 import sys
+import glob
+import concurrent.futures
 
 NUM_INDEED_RESUME_RESULTS = 50
-INDEED_RESUME_BASE_URL = 'https://resumes.indeed.com/resume/'
-INDEED_RESUME_SEARCH_BASE_URL = 'https://resumes.indeed.com/search/'
+INDEED_RESUME_BASE_URL = 'https://resumes.indeed.com/resume/%s'
+INDEED_RESUME_SEARCH_BASE_URL = 'https://resumes.indeed.com/search/?%s'
 
 # RESUME SUBSECTIONS TITLE (in normal setting)
 WORK_EXPERIENCE = 'Work Experience'
@@ -33,6 +35,9 @@ ADDITIONAL_INFORMATION = 'Additional Information'
 SKILL_NAME_INDEX = 0
 SKILL_EXP_INDEX = 1
 INFO_CONTENT_DETAILS_INDEX = 0
+
+# RESULT FILE BASE NAME
+OUTPUT_BASE_NAME = 'resume_output_'
 
 class Resume:
 	def __init__ (self, idd, **kwargs):
@@ -156,7 +161,7 @@ def produce_additional(infosection):
 	return [detail for detail in info_details.stripped_strings]
 
 def gen_resume(idd, driver):
-	resume_url = INDEED_RESUME_BASE_URL + idd
+	resume_url = INDEED_RESUME_BASE_URL % idd
 
 	driver.get(resume_url)
 	p_element = driver.page_source
@@ -196,60 +201,57 @@ def mine(filename, URL, override=True, search_range=None, steps=NUM_INDEED_RESUM
 
 	try:
 		while search < end:
-			stri = URL + '&start=' + str(search)
+			stri = URL + '&' + urlencode({'start': search})
 			idds = gen_idds(stri, driver)
+
+			if(len(idds) == 0):
+				# immediately stop
+				sys.stderr.write('Unable to find any resumes at index %d\n' % search)
+				break
+			
 			# move to the next results irrespective
 			search += steps
-			if(len(idds) == 0):
-				time.sleep(2)
-				continue
-
 			with open(filename, 'a') as outfile:
 				# really only needed because to make
 				# small number of resumes for testing
-				for i in range(steps):
+				for i in range(min(steps, len(idds))):
 					outfile.write(gen_resume(idds[i], driver).toJSON() + "\n")
-	except Exception as e:
-		sys.stderr.write('Caught exception ' + str(e) + traceback.format_exc() + "\n")
 	finally:
+		print('Driver shutting down')
 		driver.close()
+	
+	return filename
 
 def mine_multi(args, search_URL):
-	thread_list = []
-	names = []
-
 	start = args.si
 	end = args.ei
 	tr = args.threads
 	steps = ceil((end - start) / tr)
 	starting_points = list(range(start, end, steps))
-	for idx, search_start in enumerate(starting_points):
-		# Instantiates the thread
-		filename = 'resume_output' + args.name + str(idx) + '.json'
-		search_range = (search_start, end if idx + 1 == len(starting_points) else starting_points[idx + 1])
-		t = threading.Thread(
-			target=mine,
-			args=(filename, search_URL),
-			kwargs={
+	fs = []
+
+	with concurrent.futures.ThreadPoolExecutor(max_workers=tr) as executor:
+		for idx, search_start in enumerate(starting_points):
+			# Instantiates the thread
+			filename = OUTPUT_BASE_NAME + args.name + str(idx) + '.json'
+			search_range = (search_start, end if idx + 1 == len(starting_points) else starting_points[idx + 1])
+			mine_args = (filename, search_URL)
+			mine_kwargs = {
 				"override" : args.override,
 				"search_range" : search_range,
 				"steps": min(end - starting_points[idx], steps, NUM_INDEED_RESUME_RESULTS)
 			}
-		)
-		# Sticks the thread in a list so that it remains accessible
-		thread_list.append(t)
-		names.append(filename)
-
-	# Starts threads
-	for thread in thread_list:
-		thread.start()
-
-	# This blocks the calling thread until the thread whose join() method is called is terminated.
-	# From http://docs.python.org/2/library/threading.html#thread-objects
-	for thread in thread_list:
-		thread.join()
-
-	consolidate_files(args.name, names, args.override)
+			fs.append(executor.submit(mine, *mine_args, **mine_kwargs))
+			
+		filenames = []
+		try:
+			for fut in concurrent.futures.as_completed(fs):
+				filenames.append(fut.result())
+		except (KeyboardInterrupt, Exception) as e:
+			sys.stderr.write('Caught exception %s of type %s, cleaning up results\n' % (str(e), type(e)))
+			clean_up_all_results(args.name)
+		else:
+			consolidate_files(args.name, filenames, args.override)
 
 def consolidate_files(name, names, override=True):
 	mode = 'w' if override else 'a'
@@ -261,11 +263,23 @@ def consolidate_files(name, names, override=True):
 			
 	file.close()
 
+def clean_up_all_results(name):
+	output_glob = OUTPUT_BASE_NAME + name + '*' + '.json'
+	print(output_glob)
+	files = glob.glob(output_glob)
+	for file in files:
+		os.remove(file)
+
 def main(args):
 	t = time.clock()
 	# restrict search only to job titles skills and field of study
-	search_URL= f"{INDEED_RESUME_SEARCH_BASE_URL}?q={args.q}&l={args.l}&searchFields=jt,skills,fos"
-	search_URL = quote_plus(search_URL, safe='/:?&=')
+	query = {
+		'q': args.q,
+		'l': args.l,
+		'searchFields': 'jt,skills,fos'
+	}
+	query_string = urlencode(query)
+	search_URL= INDEED_RESUME_SEARCH_BASE_URL % query_string
 
 	mine_multi(args, search_URL)
 	print(time.clock() - t),
@@ -277,13 +291,19 @@ if __name__ == "__main__":
 	)
 	required_arguments = parser.add_argument_group(title='required arguments')
 	required_arguments.add_argument('-q', metavar='query', required=True, help='search query to run on indeed e.g software engineer')
-	required_arguments.add_argument('--name', metavar='name', required=True, help='name of search (used to save files)')
+	required_arguments.add_argument('--name', metavar='name', required=True, help='name of search (used to save files, spaces turned to "-")')
 
 	parser.add_argument('-l', default='Canada', metavar='location', help='location scope for search')
 	parser.add_argument('-si', default=0, type=int, metavar='start', help='starting index (multiples of 50)')
 	parser.add_argument('-ei', default=5000, type=int, metavar='end', help='ending index (multiples of 50)')
 	parser.add_argument('--threads', default=8, type=int, metavar='threads', help='# of threads to run')
-	parser.add_argument('--override', action='store_true', help='override existing result if any')
+	parser.add_argument('--override', default=False, action='store_true', help='override existing result if any')
 
 	args = parser.parse_args()
+
+	# in case of carrige returns
+	args.q = args.q.strip()
+	args.l = args.l.strip()
+	args.name = args.name.strip()
+	args.name = args.name.replace(' ', '-')
 	main(args)

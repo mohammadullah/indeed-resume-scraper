@@ -1,5 +1,17 @@
 Scrape resumes from indeed
 
+# Setup
+Install `requirements.txt` for your `Python` environment e.g
+```
+pip install -r requirements.txt
+```
+
+or
+
+```
+conda install --file requirements.txt
+```
+
 # Running script
 
 ```bash
@@ -19,8 +31,16 @@ optional arguments:
   --name name        name of search (used to save files)
 ```
 
-# Example
+## Example
 Scrape 100 resumes (1st - 100th resume) for software engineering in Canada
 ```bash
 python indeed-scraper.py -q 'software engineer'  --name software-canada -ei 100
 ```
+
+## Multiple queries
+The `script.sh` can be run with a file that has a job title per line
+```
+./script.sh <filename>
+```
+
+Please read `script.sh` for some more details
