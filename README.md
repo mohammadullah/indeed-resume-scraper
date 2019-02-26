@@ -55,3 +55,6 @@ The `script.sh` can be run with a file that has a job title per line
 ```
 
 Please read `script.sh` for some more details
+
+## Update (Mohammad)
+Dirty hack to extract summary from the resume
