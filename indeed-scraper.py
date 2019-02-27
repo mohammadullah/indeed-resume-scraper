@@ -169,13 +169,14 @@ def produce_additional(infosection):
 	return [detail for detail in info_details.stripped_strings]
 
 
-def produce_summary(summarysection, len_check):
-	info_details = summarysection.contents[len_check-1]
-	info_final = [detail for detail in info_details.stripped_strings]
-	if len(info_final) > 2:
-		return info_final
-	else:
-		pass
+def produce_summary(summarysection):
+
+	summary_details = []
+	if len(summarysection) == 4:
+  		summary_details = summarysection.contents[-1]
+  		summary_details = [detail for detail in summary_details.stripped_strings]
+
+	return summary_details
 
 
 def gen_resume(idd, driver):
@@ -187,15 +188,12 @@ def gen_resume(idd, driver):
 
 	resume_details = {}
 
-	summary = soup.find_all('div', attrs={"class":"rezemp-ResumeDisplay-body"})
+	resume_body = soup.find('div', attrs={"class":"rezemp-ResumeDisplay-body"})
 
-	content_check = summary[0].contents[0]
-	len_check = len(content_check)
-	## length check to see whether there is any text except the last/current job designation
-	if len_check > 2:
-		resume_details['summary'] = produce_summary(content_check, len_check)
+	summary = resume_body.contents[0]
+	resume_details['summary'] = produce_summary(summary)
 
-	resume_subsections = soup.find_all('div', attrs={"class":"rezemp-ResumeDisplaySection"})
+	resume_subsections = resume_body.find_all('div', attrs={"class":"rezemp-ResumeDisplaySection"})
 
 	for subsection in resume_subsections:
 		children = subsection.contents
