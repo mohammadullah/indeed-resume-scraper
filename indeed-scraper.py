@@ -190,26 +190,27 @@ def gen_resume(idd, driver):
 
 	resume_body = soup.find('div', attrs={"class":"rezemp-ResumeDisplay-body"})
 
-	summary = resume_body.contents[0]
-	resume_details['summary'] = produce_summary(summary)
+	if resume_body != None:
+		summary = resume_body.contents[0]
+		resume_details['summary'] = produce_summary(summary)
 
-	resume_subsections = resume_body.find_all('div', attrs={"class":"rezemp-ResumeDisplaySection"})
+		resume_subsections = resume_body.find_all('div', attrs={"class":"rezemp-ResumeDisplaySection"})
 
-	for subsection in resume_subsections:
-		children = subsection.contents
-		subsection_title = children[0].get_text()
-		if subsection_title == WORK_EXPERIENCE:
-			resume_details['jobs'] = produce_work_experience(subsection)
-		elif subsection_title == EDUCATION:
-			resume_details['schools'] = produce_education(subsection)
-		elif subsection_title == SKILLS:
-			resume_details['skills'] = produce_skills(subsection)
-		elif subsection_title == CERTIFICATIONS:
-			produce_certifications_license()
-		elif subsection_title == ADDITIONAL_INFORMATION:
-			resume_details['additional'] = produce_additional(subsection)
-		else:
-			print('ID', idd, '- Subsection title is', subsection_title)
+		for subsection in resume_subsections:
+			children = subsection.contents
+			subsection_title = children[0].get_text()
+			if subsection_title == WORK_EXPERIENCE:
+				resume_details['jobs'] = produce_work_experience(subsection)
+			elif subsection_title == EDUCATION:
+				resume_details['schools'] = produce_education(subsection)
+			elif subsection_title == SKILLS:
+				resume_details['skills'] = produce_skills(subsection)
+			elif subsection_title == CERTIFICATIONS:
+				produce_certifications_license()
+			elif subsection_title == ADDITIONAL_INFORMATION:
+				resume_details['additional'] = produce_additional(subsection)
+			else:
+				print('ID', idd, '- Subsection title is', subsection_title)
 
 	return Resume(idd, **resume_details)
 
@@ -282,12 +283,15 @@ def mine_multi(args, search_URL):
 		else:
 			consolidate_files(args.name, filenames, args.override)
 
-def consolidate_files(name, names, override=True):
+def consolidate_files(name, names, override):
 	mode = 'w' if override else 'a'
 	file = open("resume_output_" + name + ".json", mode)
 	for nam in names:
-		with open(nam, 'r') as read:
-			file.write(read.read())
+		try:
+			f_read = open(nam, 'r')
+			file.write(f_read.read())
+		except IOError:
+			continue	 
 		os.remove(nam)
 			
 	file.close()
